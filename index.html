@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Conversion Subjective Evaluation</title>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        header { text-align: center; margin-bottom: 30px; }
+        h1 { margin: 0 0 20px 0; color: #0f172a; font-size: 1.8rem; }
+        .progress-container { margin-bottom: 30px; }
+        .progress-label { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 8px; font-size: 0.9rem; color: #64748b; }
+        .progress-bar-bg { background: #e2e8f0; height: 10px; border-radius: 5px; overflow: hidden; }
+        .progress-bar-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.4s ease; }
+
+        /* 顶部音频对比区 */
+        .comparison-box { background: #f0f7ff; padding: 20px; border-radius: 10px; border: 1px solid #bae6fd; margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .section-title { font-size: 1rem; font-weight: bold; margin-bottom: 10px; display: block; color: #0369a1; }
+
+        .sample-card { border: 1px solid #e2e8f0; padding: 25px; border-radius: 12px; margin-bottom: 30px; background: #fff; }
+        .rating-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px; }
+        .rating-column-title { font-weight: bold; color: var(--primary); margin-bottom: 12px; display: block; font-size: 0.95rem; }
+        .option { display: flex; align-items: flex-start; margin-bottom: 10px; cursor: pointer; padding: 6px; border-radius: 4px; }
+        .option:hover { background: #f1f5f9; }
+        .option input { margin-right: 12px; margin-top: 5px; transform: scale(1.1); }
+        .score-val { font-weight: bold; margin-right: 10px; color: #1e293b; }
+        .score-desc { color: #64748b; font-size: 0.85rem; }
+        .controls { display: flex; justify-content: space-between; margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 20px; }
+        .btn { padding: 12px 30px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; transition: 0.2s; }
+        .btn-prev { background: #f1f5f9; color: #475569; }
+        .btn-next { background: var(--primary); color: white; }
+        .btn-submit { background: #10b981; color: white; }
+        .hidden { display: none; }
+        audio { width: 100%; height: 35px; }
+
+        @media (max-width: 600px) { .comparison-box { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+
+<div class="container" id="survey-ui">
+    <header>
+        <h1>Subjective Evaluation of Voice Conversion</h1>
+        <div class="progress-container">
+            <div class="progress-label">
+                <span id="groupStep">Group 1 of 5</span>
+                <span id="percentText">0% Complete</span>
+            </div>
+            <div class="progress-bar-bg">
+                <div class="progress-bar-fill" id="progressBar"></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="comparison-box">
+        <div>
+            <span class="section-title">▶️ Original Audio (Source)</span>
+            <audio id="srcAudio" controls></audio>
+        </div>
+        <div>
+            <span class="section-title">▶️ Reference Audio (Target)</span>
+            <audio id="refAudio" controls></audio>
+        </div>
+    </div>
+
+    <div id="samples-container"></div>
+
+    <div class="controls">
+        <button class="btn btn-prev" id="prevBtn" onclick="move(-1)">Previous</button>
+        <button class="btn btn-next" id="nextBtn" onclick="move(1)">Next Group</button>
+        <button class="btn btn-submit hidden" id="submitBtn" onclick="submitFinal()">Submit Results</button>
+    </div>
+</div>
+
+<div class="container hidden" id="success-ui" style="text-align: center; padding: 80px 20px;">
+    <h1 style="color: #10b981;">Successfully Submitted!</h1>
+    <p>Thank you for your anonymous participation.</p>
+</div>
+
+<script>
+    const CONFIG = {
+        total: 5,
+        // 已添加 vevo 到方法列表中
+        methods: ["freevc", "knnvc", "linearvc", "mkl_best", "mkl_k2", "mkl_k256", "vevo"],
+        googleUrl: "https://script.google.com/macros/s/AKfycbzcfSFAj4fhcS3gShssGcA2lJDWDecWRDGPvQw5tSOo1ev0GGK_oDOsx2gjjzZXOV3D/exec",
+        getAudio: (g, m) => `wavs/${g}/${m}.wav`
+    };
+
+    const DESC = {
+        nat: ["Very unnatural", "Unnatural", "Fair", "Natural", "Very natural"],
+        sim: ["Completely different speaker", "Not very similar", "Moderately similar", "Very similar", "Almost identical speaker"]
+    };
+
+    let current = 1;
+    let data = {};
+    let shuffledMethods = {};
+    const userId = "User_" + Math.random().toString(36).substr(2, 7);
+
+    function shuffle(array) {
+        let currentIndex = array.length, randomIndex;
+        while (currentIndex != 0) {
+            randomIndex = Math.floor(Math.random() * currentIndex);
+            currentIndex--;
+            [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+        }
+        return array;
+    }
+
+    function init() {
+        for(let i=1; i<=CONFIG.total; i++) {
+            data[i] = {};
+            shuffledMethods[i] = shuffle([...CONFIG.methods]);
+            CONFIG.methods.forEach(m => data[i][m] = { naturalness: null, similarity: null });
+        }
+        render();
+    }
+
+    function render() {
+        const percent = ((current - 1) / CONFIG.total) * 100;
+        document.getElementById('progressBar').style.width = percent + '%';
+        document.getElementById('percentText').innerText = Math.round(percent) + '% Complete';
+        document.getElementById('groupStep').innerText = `Group ${current} of ${CONFIG.total}`;
+
+        document.getElementById('srcAudio').src = CONFIG.getAudio(current, 'src');
+        document.getElementById('refAudio').src = CONFIG.getAudio(current, 'ref');
+
+        const container = document.getElementById('samples-container');
+        container.innerHTML = "";
+
+        shuffledMethods[current].forEach((m, index) => {
+            const card = document.createElement('div');
+            card.className = "sample-card";
+            const label = String.fromCharCode(65 + index);
+            card.innerHTML = `
+                <span style="font-weight:bold; color:#475569; margin-bottom:10px; display:block;">Converted Sample ${label}</span>
+                <audio controls src="${CONFIG.getAudio(current, m)}"></audio>
+                <div class="rating-grid">
+                    <div>
+                        <span class="rating-column-title">Naturalness</span>
+                        ${getRadios(current, m, 'naturalness', DESC.nat)}
+                    </div>
+                    <div>
+                        <span class="rating-column-title">Similarity to Reference</span>
+                        ${getRadios(current, m, 'similarity', DESC.sim)}
+                    </div>
+                </div>`;
+            container.appendChild(card);
+        });
+
+        document.getElementById('prevBtn').disabled = current === 1;
+        document.getElementById('nextBtn').classList.toggle('hidden', current === CONFIG.total);
+        document.getElementById('submitBtn').classList.toggle('hidden', current !== CONFIG.total);
+    }
+
+    function getRadios(g, m, type, descs) {
+        let html = "";
+        for(let i=1; i<=5; i++) {
+            const checked = data[g][m][type] == i ? "checked" : "";
+            html += `
+                <label class="option">
+                    <input type="radio" name="${g}_${m}_${type}" value="${i}" ${checked}
+                           onclick="save(${g},'${m}','${type}',${i})">
+                    <span class="score-val">${i}</span>
+                    <span class="score-desc">${descs[i-1]}</span>
+                </label>`;
+        }
+        return html;
+    }
+
+    window.save = (g, m, t, v) => data[g][m][t] = v;
+    window.move = (d) => { current += d; render(); window.scrollTo(0,0); }
+
+    async function submitFinal() {
+        let missing = false;
+        for(let g in data) {
+            for(let m in data[g]) {
+                if(!data[g][m].naturalness || !data[g][m].similarity) missing = true;
+            }
+        }
+        if(missing && !confirm("Some questions are unanswered. Submit anyway?")) return;
+
+        const btn = document.getElementById('submitBtn');
+        btn.disabled = true; btn.innerText = "Submitting...";
+
+        try {
+            await fetch(CONFIG.googleUrl, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: JSON.stringify({ user_id: userId, results: data })
+            });
+            document.getElementById('survey-ui').classList.add('hidden');
+            document.getElementById('success-ui').classList.remove('hidden');
+        } catch (e) {
+            alert("Submission error. Check your internet.");
+            btn.disabled = false; btn.innerText = "Submit Results";
+        }
+    }
+    init();
+</script>
+</body>
+</html>
