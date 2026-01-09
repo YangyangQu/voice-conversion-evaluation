@@ -6,7 +6,7 @@
     <title>Voice Conversion Subjective Evaluation</title>
     <style>
         :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; }
-        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.6; }
+        body { font-family: 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.6; }
         .container { max-width: 900px; margin: 0 auto; background: white; padding: 40px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
         header { text-align: center; margin-bottom: 30px; }
         h1 { margin: 0 0 20px 0; color: #0f172a; font-size: 1.8rem; }
@@ -15,27 +15,62 @@
         .progress-bar-bg { background: #e2e8f0; height: 10px; border-radius: 5px; overflow: hidden; }
         .progress-bar-fill { background: var(--primary); height: 100%; width: 0%; transition: width 0.4s ease; }
 
-        /* 顶部音频对比区 */
-        .comparison-box { background: #f0f7ff; padding: 20px; border-radius: 10px; border: 1px solid #bae6fd; margin-bottom: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .section-title { font-size: 1rem; font-weight: bold; margin-bottom: 10px; display: block; color: #0369a1; }
+        /* --- 顶部音频区修改 --- */
+        .comparison-box {
+            background: #f0f7ff;
+            padding: 25px;
+            border-radius: 10px;
+            border: 1px solid #bae6fd;
+            margin-bottom: 30px;
+            /* 改为 Flex 布局以居中单个元素 */
+            display: flex;
+            justify-content: center;
+        }
+        /* 限制顶部单个播放器的最大宽度 */
+        .top-player-container { width: 100%; max-width: 600px; text-align: center; }
+        .section-title { font-size: 1rem; font-weight: bold; margin-bottom: 12px; display: block; color: #0369a1; }
 
+        /* --- 样本卡片区域修改 --- */
         .sample-card { border: 1px solid #e2e8f0; padding: 25px; border-radius: 12px; margin-bottom: 30px; background: #fff; }
+
+        /* 新增：样本内部的左右音频对比布局 */
+        .sample-audio-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* 左右两栏 */
+            gap: 25px;
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .sample-audio-item span {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #475569;
+            font-size: 0.95rem;
+        }
+
+        /* 评分区 */
         .rating-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-top: 20px; }
         .rating-column-title { font-weight: bold; color: var(--primary); margin-bottom: 12px; display: block; font-size: 0.95rem; }
-        .option { display: flex; align-items: flex-start; margin-bottom: 10px; cursor: pointer; padding: 6px; border-radius: 4px; }
+        .option { display: flex; align-items: flex-start; margin-bottom: 10px; cursor: pointer; padding: 6px; border-radius: 4px; transition: background 0.2s; }
         .option:hover { background: #f1f5f9; }
         .option input { margin-right: 12px; margin-top: 5px; transform: scale(1.1); }
         .score-val { font-weight: bold; margin-right: 10px; color: #1e293b; }
         .score-desc { color: #64748b; font-size: 0.85rem; }
+
         .controls { display: flex; justify-content: space-between; margin-top: 40px; border-top: 1px solid #f1f5f9; padding-top: 20px; }
         .btn { padding: 12px 30px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; transition: 0.2s; }
         .btn-prev { background: #f1f5f9; color: #475569; }
         .btn-next { background: var(--primary); color: white; }
         .btn-submit { background: #10b981; color: white; }
         .hidden { display: none; }
-        audio { width: 100%; height: 35px; }
+        audio { width: 100%; height: 40px; }
 
-        @media (max-width: 600px) { .comparison-box { grid-template-columns: 1fr; } }
+        /* 手机端适配：变为上下排列 */
+        @media (max-width: 768px) {
+            .sample-audio-row, .rating-grid { grid-template-columns: 1fr; gap: 15px; }
+        }
     </style>
 </head>
 <body>
@@ -55,13 +90,9 @@
     </header>
 
     <div class="comparison-box">
-        <div>
-            <span class="section-title">▶️ Original Audio (Source)</span>
-            <audio id="srcAudio" controls></audio>
-        </div>
-        <div>
-            <span class="section-title">▶️ Reference Audio (Target)</span>
-            <audio id="refAudio" controls></audio>
+        <div class="top-player-container">
+            <span class="section-title">▶️ Original Audio (Source Content)</span>
+            <audio id="srcAudio" controls style="width: 100%"></audio>
         </div>
     </div>
 
@@ -82,7 +113,6 @@
 <script>
     const CONFIG = {
         total: 5,
-        // 已添加 vevo 到方法列表中
         methods: ["freevc", "knnvc", "linearvc", "mkl_best", "mkl_k2", "mkl_k256", "vevo"],
         googleUrl: "https://script.google.com/macros/s/AKfycbzcfSFAj4fhcS3gShssGcA2lJDWDecWRDGPvQw5tSOo1ev0GGK_oDOsx2gjjzZXOV3D/exec",
         getAudio: (g, m) => `wavs/${g}/${m}.wav`
@@ -123,19 +153,32 @@
         document.getElementById('percentText').innerText = Math.round(percent) + '% Complete';
         document.getElementById('groupStep').innerText = `Group ${current} of ${CONFIG.total}`;
 
+        // 更新顶部唯一的 Source 音频
         document.getElementById('srcAudio').src = CONFIG.getAudio(current, 'src');
-        document.getElementById('refAudio').src = CONFIG.getAudio(current, 'ref');
+        // 注意：这里不再更新顶部的 refAudio，因为它已经被移除了
 
         const container = document.getElementById('samples-container');
         container.innerHTML = "";
+
+        // 获取当前组的 Reference 音频路径，供下面循环使用
+        const currentRefAudioUrl = CONFIG.getAudio(current, 'ref');
 
         shuffledMethods[current].forEach((m, index) => {
             const card = document.createElement('div');
             card.className = "sample-card";
             const label = String.fromCharCode(65 + index);
+            // 修改核心：在每个卡片内部创建左右对比布局
             card.innerHTML = `
-                <span style="font-weight:bold; color:#475569; margin-bottom:10px; display:block;">Converted Sample ${label}</span>
-                <audio controls src="${CONFIG.getAudio(current, m)}"></audio>
+                <div class="sample-audio-row">
+                    <div class="sample-audio-item" style="background: #f8fafc; padding: 15px; border-radius: 8px;">
+                        <span style="color: var(--primary);">▶️ Reference (Target Speaker)</span>
+                        <audio controls src="${currentRefAudioUrl}" style="width: 100%"></audio>
+                    </div>
+                    <div class="sample-audio-item" style="padding: 15px;">
+                        <span>▶️ Converted Sample ${label}</span>
+                        <audio controls src="${CONFIG.getAudio(current, m)}" style="width: 100%"></audio>
+                    </div>
+                </div>
                 <div class="rating-grid">
                     <div>
                         <span class="rating-column-title">Naturalness</span>
